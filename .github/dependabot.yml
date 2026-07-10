@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Panel de Tareas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#EFF3F0;
+    --card:#FFFFFF;
+    --primary:#2F6F62;
+    --primary-dark:#204F45;
+    --primary-soft:#E1EEE9;
+    --accent:#F2A65A;
+    --accent-dark:#D98A3D;
+    --accent-soft:#FCEBD8;
+    --success:#4C9A6E;
+    --success-soft:#E4F3EA;
+    --error:#D9685F;
+    --error-soft:#FBE7E5;
+    --medio:#E0A83E;
+    --medio-soft:#FBF1DA;
+    --ink:#22302B;
+    --ink-soft:#63736C;
+    --border:#DCE4DF;
+    --font-display:'Baloo 2', sans-serif;
+    --font-body:'Inter', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    font-family:var(--font-body);
+    color:var(--ink);
+    min-height:100vh;
+  }
+  #app{
+    max-width:720px;
+    margin:0 auto;
+    padding:20px 16px 60px;
+    min-height:100vh;
+  }
+  h1,h2,h3{
+    font-family:var(--font-display);
+    margin:0 0 4px;
+  }
+  .center-screen{
+    min-height:90vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+  }
+  .logo-mark{
+    width:64px;height:64px;border-radius:20px;
+    background:var(--primary);
+    display:flex;align-items:center;justify-content:center;
+    font-family:var(--font-display);font-weight:700;color:#fff;font-size:26px;
+    margin-bottom:14px;
+    box-shadow:0 8px 20px rgba(47,111,98,.25);
+  }
+  .subtitle{color:var(--ink-soft);font-size:14px;margin-bottom:28px;}
+  .card{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:18px;
+    padding:20px;
+    margin-bottom:16px;
+  }
+  .login-card{width:100%;max-width:360px;text-align:left;}
+  label{
+    display:block;font-size:13px;font-weight:600;color:var(--ink-soft);
+    margin:14px 0 6px;
+  }
+  input[type=text],input[type=password],textarea,select{
+    width:100%;
+    padding:12px 14px;
+    border-radius:12px;
+    border:1.5px solid var(--border);
+    font-family:var(--font-body);
+    font-size:15px;
+    background:#fafcfb;
+    color:var(--ink);
+  }
+  input:focus,textarea:focus,select:focus{
+    outline:none;border-color:var(--primary);background:#fff;
+  }
+  textarea{resize:vertical;min-height:70px;}
+  button{
+    font-family:var(--font-body);
+    font-weight:600;
+    border:none;
+    border-radius:12px;
+    padding:12px 18px;
+    cursor:pointer;
+    font-size:15px;
+    transition:transform .08s ease, opacity .15s ease;
+  }
+  button:active{transform:scale(.97);}
+  .btn-primary{background:var(--primary);color:#fff;width:100%;margin-top:20px;}
+  .btn-primary:hover{background:var(--primary-dark);}
+  .btn-accent{background:var(--accent);color:#fff;}
+  .btn-accent:hover{background:var(--accent-dark);}
+  .btn-success{background:var(--success);color:#fff;}
+  .btn-success:hover{background:#3d8a5d;}
+  .btn-ghost{background:transparent;color:var(--primary);border:1.5px solid var(--primary-soft);}
+  .btn-ghost:hover{background:var(--primary-soft);}
+  .btn-outline-danger{background:transparent;color:var(--error);border:1.5px solid var(--error-soft);}
+  .btn-small{padding:8px 12px;font-size:13px;border-radius:10px;}
+  .btn-block{width:100%;}
+  .error-msg{
+    background:var(--error-soft);color:var(--error);
+    padding:10px 14px;border-radius:10px;font-size:14px;
+    margin-top:14px;font-weight:600;
+  }
+  .topbar{
+    display:flex;align-items:center;justify-content:space-between;
+    margin-bottom:18px;
+  }
+  .who{
+    display:flex;align-items:center;gap:10px;
+  }
+  .who .badge{
+    width:38px;height:38px;border-radius:11px;
+    background:var(--primary);color:#fff;font-family:var(--font-display);
+    display:flex;align-items:center;justify-content:center;font-weight:700;
+  }
+  .kid-mode .who .badge{background:var(--accent);}
+  .tabs{
+    display:flex;gap:8px;margin-bottom:18px;background:#fff;
+    border:1px solid var(--border);padding:5px;border-radius:14px;
+  }
+  .tab{
+    flex:1;text-align:center;padding:9px 6px;border-radius:10px;
+    font-weight:600;font-size:14px;color:var(--ink-soft);cursor:pointer;
+  }
+  .tab.active{background:var(--primary);color:#fff;}
+  .kid-mode .tab.active{background:var(--accent);}
+  .nino-item{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:14px 16px;border:1px solid var(--border);border-radius:14px;
+    background:#fff;margin-bottom:10px;
+  }
+  .nino-name{font-weight:700;font-family:var(--font-display);font-size:16px;}
+  .nino-sub{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+  .row-gap{display:flex;gap:8px;flex-wrap:wrap;}
+  .empty-state{
+    text-align:center;color:var(--ink-soft);padding:40px 16px;font-size:14px;
+  }
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(20,30,26,.45);
+    display:flex;align-items:flex-end;justify-content:center;
+    z-index:50;
+  }
+  @media(min-width:600px){
+    .modal-overlay{align-items:center;}
+  }
+  .modal{
+    background:#fff;border-radius:20px 20px 0 0;
+    padding:22px 20px 26px;width:100%;max-width:480px;
+    max-height:88vh;overflow-y:auto;
+  }
+  @media(min-width:600px){
+    .modal{border-radius:20px;}
+  }
+  .modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+  .close-x{
+    background:var(--bg);border-radius:10px;width:32px;height:32px;
+    display:flex;align-items:center;justify-content:center;color:var(--ink-soft);
+    font-size:18px;cursor:pointer;flex-shrink:0;
+  }
+  .pregunta-row{
+    display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;
+  }
+  .pregunta-row input{flex:1;}
+  .remove-btn{
+    background:var(--error-soft);color:var(--error);width:38px;height:38px;flex-shrink:0;
+    border-radius:10px;font-size:16px;
+  }
+  .add-pregunta-btn{
+    background:var(--primary-soft);color:var(--primary-dark);width:100%;margin-top:4px;
+  }
+  .task-card{
+    background:#fff;border:1px solid var(--border);border-radius:16px;
+    padding:16px;margin-bottom:12px;
+  }
+  .task-meta{
+    font-size:12px;color:var(--ink-soft);margin-bottom:8px;display:flex;gap:10px;flex-wrap:wrap;
+  }
+  .task-texto{font-size:14.5px;line-height:1.5;margin-bottom:10px;}
+  .estado-chip{
+    display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;
+    text-transform:uppercase;letter-spacing:.03em;
+  }
+  .estado-pendiente{background:var(--medio-soft);color:var(--medio);}
+  .estado-respondida{background:var(--primary-soft);color:var(--primary-dark);}
+  .estado-corregida{background:var(--success-soft);color:var(--success);}
+  .pregunta-block{margin-bottom:14px;}
+  .pregunta-block .p-text{font-weight:600;font-size:14.5px;margin-bottom:6px;}
+  .respuesta-view{
+    background:var(--bg);padding:10px 12px;border-radius:10px;font-size:14px;
+    color:var(--ink);white-space:pre-wrap;
+  }
+  .stamp{
+    display:inline-block;padding:8px 18px;border-radius:10px;font-family:var(--font-display);
+    font-weight:700;font-size:14px;letter-spacing:.02em;transform:rotate(-2deg);
+    border:2.5px solid; margin-bottom:10px;
+  }
+  .stamp-Muy_bien{color:var(--success);border-color:var(--success);}
+  .stamp-Medio{color:var(--medio);border-color:var(--medio);}
+  .stamp-Mal{color:var(--error);border-color:var(--error);}
+  .correccion-box{
+    background:var(--accent-soft);border-radius:10px;padding:10px 12px;font-size:14px;
+    color:#7a4d1c;white-space:pre-wrap;
+  }
+  .fab-add{
+    display:flex;align-items:center;gap:6px;justify-content:center;
+    background:var(--primary);color:#fff;padding:11px 16px;border-radius:12px;
+    font-weight:700;margin-bottom:18px;width:100%;
+  }
+  .fade-note{font-size:12px;color:var(--ink-soft);margin-top:2px;}
+  .section-title{font-size:13px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin:20px 0 10px;}
+  .divider{height:1px;background:var(--border);margin:14px 0;}
+  .link-btn{background:none;border:none;color:var(--primary);font-weight:600;font-size:13px;padding:0;cursor:pointer;}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+/* ======================= CONFIGURACIÓN ======================= */
+/* Pegá acá la URL y la clave anon de TU proyecto de Supabase */
+const SUPABASE_URL = "https://flkjwpcypihdkiyblucs.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_u7n8Y8_cjU78pgqlSVkG6w_FO2K99Q2";
+
+const NICO_USUARIO = "Nico";
+const NICO_CONTRASENA = "Aganlna26";
+
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/* ======================= ESTADO ======================= */
+let STATE = {
+  user: null,          // { type:'nico' } o { type:'nino', id, usuario }
+  ninos: [],
+  tareas: [],
+  loginError: "",
+  nicoTab: "ninos",     // ninos | enviados
+  ninoTab: "pendientes",// pendientes | corregidas
+  openAddNinoModal: false,
+  addNinoError: "",
+  openAssignModalFor: null, // nino_id
+  assignDraft: { texto:"", preguntas:[""] },
+  assignError: "",
+  openTareaModal: null, // tarea object (para responder)
+  respuestasDraft: [],
+  gradeDraft: {}, // { [tareaId]: {calificacion, correccion} }
+};
+
+let chNinos = null, chTareas = null;
+
+/* ======================= HELPERS ======================= */
+function esc(s){
+  return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+function fmtFecha(iso){
+  if(!iso) return "";
+  const d = new Date(iso);
+  return d.toLocaleString('es-AR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+}
+function ninoNombre(id){
+  const n = STATE.ninos.find(x => x.id === id);
+  return n ? n.usuario : "Niño";
+}
+function render(){
+  const app = document.getElementById('app');
+  if(!STATE.user) app.innerHTML = renderLogin();
+  else if(STATE.user.type === 'nico') app.innerHTML = renderNico();
+  else app.innerHTML = renderNino();
+
+  const modal = renderModals();
+  if(modal) app.innerHTML += modal;
+}
+
+/* ======================= LOGIN ======================= */
+function renderLogin(){
+  return `
+  <div class="center-screen">
+    <div class="logo-mark">✳</div>
+    <h1>Panel de Tareas</h1>
+    <div class="subtitle">Ingresá tu usuario y contraseña</div>
+    <div class="card login-card">
+      <label>Usuario</label>
+      <input type="text" id="inp-usuario" placeholder="Usuario" autocomplete="off">
+      <label>Contraseña</label>
+      <input type="password" id="inp-contrasena" placeholder="Contraseña">
+      ${STATE.loginError ? `<div class="error-msg">${esc(STATE.loginError)}</div>` : ""}
+      <button class="btn-primary" onclick="handleLogin()">Entrar</button>
+    </div>
+  </div>`;
+}
+
+async function handleLogin(){
+  const usuario = document.getElementById('inp-usuario').value.trim();
+  const contrasena = document.getElementById('inp-contrasena').value;
+
+  if(!usuario || !contrasena){
+    STATE.loginError = "Completá usuario y contraseña";
+    render();
+    return;
+  }
+
+  if(usuario === NICO_USUARIO && contrasena === NICO_CONTRASENA){
+    STATE.user = { type:'nico' };
+    STATE.loginError = "";
+    await loadNinos();
+    await loadTareas();
+    subscribeRealtime();
+    render();
+    return;
+  }
+
+  const { data, error } = await sb.from('ninos').select('*').eq('usuario', usuario).maybeSingle();
+
+  if(error || !data){
+    STATE.loginError = "No existe este usuario";
+    render();
+    return;
+  }
+  if(data.contrasena !== contrasena){
+    STATE.loginError = "No existe este usuario";
+    render();
+    return;
+  }
+
+  STATE.user = { type:'nino', id:data.id, usuario:data.usuario };
+  STATE.loginError = "";
+  await loadTareas();
+  subscribeRealtime();
+  render();
+}
+
+function logout(){
+  STATE.user = null;
+  STATE.loginError = "";
+  STATE.ninos = [];
+  STATE.tareas = [];
+  STATE.nicoTab = "ninos";
+  STATE.ninoTab = "pendientes";
+  if(chNinos) sb.removeChannel(chNinos);
+  if(chTareas) sb.removeChannel(chTareas);
+  render();
+}
+
+/* ======================= DATA LOADING ======================= */
+async function loadNinos(){
+  const { data } = await sb.from('ninos').select('*').order('created_at', { ascending:true });
+  STATE.ninos = data || [];
+}
+
+async function loadTareas(){
+  if(!STATE.user) return;
+  if(STATE.user.type === 'nico'){
+    const { data } = await sb.from('tareas').select('*').order('fecha_envio_nico', { ascending:false });
+    STATE.tareas = data || [];
+  }else{
+    const { data } = await sb.from('tareas').select('*').eq('nino_id', STATE.user.id).order('fecha_envio_nico', { ascending:false });
+    STATE.tareas = data || [];
+  }
+}
+
+function subscribeRealtime(){
+  if(chNinos) sb.removeChannel(chNinos);
+  if(chTareas) sb.removeChannel(chTareas);
+
+  chNinos = sb.channel('ninos-changes')
+    .on('postgres_changes', { event:'*', schema:'public', table:'ninos' }, async () => {
+      if(STATE.user?.type === 'nico'){ await loadNinos(); render(); }
+    }).subscribe();
+
+  chTareas = sb.channel('tareas-changes')
+    .on('postgres_changes', { event:'*', schema:'public', table:'tareas' }, async () => {
+      await loadTareas(); render();
+    }).subscribe();
+}
+
+/* ======================= PANEL NICO ======================= */
+function renderNico(){
+  const pendientesPorNino = {};
+  STATE.tareas.forEach(t => {
+    if(!pendientesPorNino[t.nino_id]) pendientesPorNino[t.nino_id] = [];
+    pendientesPorNino[t.nino_id].push(t);
+  });
+
+  const enviados = STATE.tareas.filter(t => t.estado === 'respondida' || t.estado === 'corregida');
+
+  return `
+  <div class="topbar">
+    <div class="who">
+      <div class="badge">N</div>
+      <div>
+        <div style="font-weight:700;">Nico</div>
+        <div class="fade-note">Panel del profesional</div>
+      </div>
+    </div>
+    <button class="btn-ghost btn-small" onclick="logout()">Salir</button>
+  </div>
+
+  <div class="tabs">
+    <div class="tab ${STATE.nicoTab==='ninos'?'active':''}" onclick="setNicoTab('ninos')">Niños</div>
+    <div class="tab ${STATE.nicoTab==='enviados'?'active':''}" onclick="setNicoTab('enviados')">
+      Enviados De Niños ${enviados.length ? `(${enviados.length})` : ''}
+    </div>
+  </div>
+
+  ${STATE.nicoTab === 'ninos' ? renderNicoTabNinos(pendientesPorNino) : renderNicoTabEnviados(enviados)}
+  `;
+}
+
+function renderNicoTabNinos(porNino){
+  return `
+  <button class="fab-add" onclick="openAddNino()">+ Niño</button>
+  ${STATE.ninos.length === 0 ? `<div class="empty-state">Todavía no agregaste ningún niño.</div>` : ''}
+  ${STATE.ninos.map(n => {
+    const tareasDeEste = porNino[n.id] || [];
+    return `
+    <div class="nino-item" style="flex-direction:column;align-items:stretch;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <div class="nino-name">${esc(n.usuario)}</div>
+          <div class="nino-sub">${tareasDeEste.length} tarea${tareasDeEste.length===1?'':'s'} enviada${tareasDeEste.length===1?'':'s'}</div>
+        </div>
+        <button class="btn-accent btn-small" onclick="openAssign('${n.id}')">Texto y Preguntas Agregar+</button>
+      </div>
+      ${tareasDeEste.length ? `
+        <div class="divider"></div>
+        ${tareasDeEste.slice(0,4).map(t => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:13px;">
+            <span style="color:var(--ink-soft);">${esc(t.texto.slice(0,40))}${t.texto.length>40?'…':''}</span>
+            <span class="estado-chip estado-${t.estado}">${estadoLabel(t.estado)}</span>
+          </div>
+          <div class="fade-note" style="margin-bottom:4px;">Enviado ${fmtFecha(t.fecha_envio_nico)}</div>
+        `).join('')}
+      ` : ''}
+    </div>`;
+  }).join('')}
+  `;
+}
+
+function estadoLabel(e){
+  return e === 'pendiente' ? 'Pendiente' : e === 'respondida' ? 'Respondida' : 'Corregida';
+}
+
+function renderNicoTabEnviados(enviados){
+  if(enviados.length === 0) return `<div class="empty-state">Todavía no hay tareas respondidas por los niños.</div>`;
+  return enviados.map(t => {
+    const draft = STATE.gradeDraft[t.id] || { calificacion: t.calificacion || '', correccion: t.correccion || '' };
+    return `
+    <div class="task-card">
+      <div class="task-meta">
+        <span><b>${esc(ninoNombre(t.nino_id))}</b></span>
+        <span>· enviado ${fmtFecha(t.fecha_envio_nino)}</span>
+        <span class="estado-chip estado-${t.estado}">${estadoLabel(t.estado)}</span>
+      </div>
+      <div class="task-texto"><b>Texto:</b> ${esc(t.texto)}</div>
+      ${(t.preguntas || []).map((p, i) => `
+        <div class="pregunta-block">
+          <div class="p-text">${i+1}. ${esc(p)}</div>
+          <div class="respuesta-view">${esc((t.respuestas && t.respuestas[i]) || '(sin respuesta)')}</div>
+        </div>
+      `).join('')}
+      <div class="divider"></div>
+      <label>Calificación</label>
+      <select id="grade-cal-${t.id}" onchange="updateDraft('${t.id}','calificacion',this.value)">
+        <option value="" ${!draft.calificacion?'selected':''}>Sin calificar</option>
+        <option value="Muy bien" ${draft.calificacion==='Muy bien'?'selected':''}>Muy bien</option>
+        <option value="Medio" ${draft.calificacion==='Medio'?'selected':''}>Medio</option>
+        <option value="Mal" ${draft.calificacion==='Mal'?'selected':''}>Mal</option>
+      </select>
+      <label>Corrección / comentario para el niño</label>
+      <textarea id="grade-txt-${t.id}" placeholder="Escribí una devolución..." oninput="updateDraft('${t.id}','correccion',this.value)">${esc(draft.correccion)}</textarea>
+      <button class="btn-success btn-block" style="margin-top:12px;" onclick="enviarCorreccion('${t.id}')">Enviar al Niño</button>
+    </div>`;
+  }).join('');
+}
+
+function setNicoTab(tab){ STATE.nicoTab = tab; render(); }
+
+function updateDraft(id, field, value){
+  if(!STATE.gradeDraft[id]) STATE.gradeDraft[id] = { calificacion:'', correccion:'' };
+  STATE.gradeDraft[id][field] = value;
+}
+
+async function enviarCorreccion(tareaId){
+  const draft = STATE.gradeDraft[tareaId] || {};
+  const { error } = await sb.from('tareas').update({
+    calificacion: draft.calificacion || null,
+    correccion: draft.correccion || null,
+    estado: 'corregida',
+    fecha_correccion: new Date().toISOString()
+  }).eq('id', tareaId);
+  if(!error){
+    delete STATE.gradeDraft[tareaId];
+    await loadTareas();
+    render();
+  }
+}
+
+/* ---- Agregar niño ---- */
+function openAddNino(){ STATE.openAddNinoModal = true; STATE.addNinoError=""; render(); }
+function closeAddNino(){ STATE.openAddNinoModal = false; render(); }
+
+async function submitAddNino(){
+  const usuario = document.getElementById('new-nino-usuario').value.trim();
+  const contrasena = document.getElementById('new-nino-contrasena').value.trim();
+  if(!usuario || !contrasena){
+    STATE.addNinoError = "Completá usuario y contraseña";
+    render(); return;
+  }
+  const { error } = await sb.from('ninos').insert({ usuario, contrasena });
+  if(error){
+    STATE.addNinoError = error.code === '23505' ? "Ese usuario ya existe" : "No se pudo crear el niño";
+    render(); return;
+  }
+  STATE.openAddNinoModal = false;
+  await loadNinos();
+  render();
+}
+
+/* ---- Asignar texto y preguntas ---- */
+function openAssign(ninoId){
+  STATE.openAssignModalFor = ninoId;
+  STATE.assignDraft = { texto:"", preguntas:[""] };
+  STATE.assignError = "";
+  render();
+}
+function closeAssign(){ STATE.openAssignModalFor = null; render(); }
+
+function addPreguntaField(){
+  STATE.assignDraft.preguntas.push("");
+  render();
+}
+function removePreguntaField(i){
+  STATE.assignDraft.preguntas.splice(i,1);
+  if(STATE.assignDraft.preguntas.length === 0) STATE.assignDraft.preguntas.push("");
+  render();
+}
+function updateAssignTexto(v){ STATE.assignDraft.texto = v; }
+function updateAssignPregunta(i, v){ STATE.assignDraft.preguntas[i] = v; }
+
+async function submitAssign(){
+  const texto = STATE.assignDraft.texto.trim();
+  const preguntas = STATE.assignDraft.preguntas.map(p => p.trim()).filter(p => p.length > 0);
+  if(!texto){ STATE.assignError = "Escribí el texto"; render(); return; }
+  if(preguntas.length === 0){ STATE.assignError = "Agregá al menos una pregunta"; render(); return; }
+
+  const { error } = await sb.from('tareas').insert({
+    nino_id: STATE.openAssignModalFor,
+    texto,
+    preguntas,
+    estado: 'pendiente',
+    fecha_envio_nico: new Date().toISOString()
+  });
+  if(error){ STATE.assignError = "No se pudo enviar"; render(); return; }
+  STATE.openAssignModalFor = null;
+  await loadTareas();
+  render();
+}
+
+/* ======================= PANEL NIÑO ======================= */
+function renderNino(){
+  const pendientes = STATE.tareas.filter(t => t.estado === 'pendiente');
+  const corregidas = STATE.tareas.filter(t => t.estado === 'corregida');
+  const respondidas = STATE.tareas.filter(t => t.estado === 'respondida');
+
+  return `
+  <div class="topbar kid-mode">
+    <div class="who">
+      <div class="badge">${esc(STATE.user.usuario[0]?.toUpperCase() || '?')}</div>
+      <div>
+        <div style="font-weight:700;">${esc(STATE.user.usuario)}</div>
+        <div class="fade-note">¡Hola! Estas son tus tareas</div>
+      </div>
+    </div>
+    <button class="btn-ghost btn-small" onclick="logout()">Salir</button>
+  </div>
+
+  <div class="tabs kid-mode">
+    <div class="tab ${STATE.ninoTab==='pendientes'?'active':''}" onclick="setNinoTab('pendientes')">
+      Tareas ${pendientes.length ? `(${pendientes.length})` : ''}
+    </div>
+    <div class="tab ${STATE.ninoTab==='corregidas'?'active':''}" onclick="setNinoTab('corregidas')">Corregidas</div>
+  </div>
+
+  ${STATE.ninoTab === 'pendientes' ? renderNinoPendientes(pendientes, respondidas) : renderNinoCorregidas(corregidas)}
+  `;
+}
+
+function setNinoTab(tab){ STATE.ninoTab = tab; render(); }
+
+function renderNinoPendientes(pendientes, respondidas){
+  let html = "";
+  if(pendientes.length === 0 && respondidas.length === 0){
+    html += `<div class="empty-state">Por ahora no tenés tareas nuevas. ¡Volvé más tarde! 🌱</div>`;
+  }
+  if(pendientes.length){
+    html += pendientes.map(t => `
+      <div class="task-card">
+        <div class="task-meta">
+          <span class="estado-chip estado-pendiente">Nueva</span>
+          <span>${fmtFecha(t.fecha_envio_nico)}</span>
+        </div>
+        <div class="task-texto">${esc(t.texto)}</div>
+        <button class="btn-accent btn-block" onclick="openTarea('${t.id}')">Empezar</button>
+      </div>`).join('');
+  }
+  if(respondidas.length){
+    html += `<div class="section-title">Ya enviadas, esperando corrección</div>`;
+    html += respondidas.map(t => `
+      <div class="task-card">
+        <div class="task-meta">
+          <span class="estado-chip estado-respondida">Enviada</span>
+          <span>${fmtFecha(t.fecha_envio_nino)}</span>
+        </div>
+        <div class="task-texto">${esc(t.texto)}</div>
+      </div>`).join('');
+  }
+  return html;
+}
+
+function renderNinoCorregidas(corregidas){
+  if(corregidas.length === 0) return `<div class="empty-state">Todavía no tenés tareas corregidas.</div>`;
+  return corregidas.map(t => {
+    const stampClass = t.calificacion ? 'stamp-' + t.calificacion.replace(' ', '_') : '';
+    return `
+    <div class="task-card">
+      <div class="task-meta">
+        <span>${fmtFecha(t.fecha_correccion)}</span>
+      </div>
+      <div class="task-texto">${esc(t.texto)}</div>
+      ${(t.preguntas||[]).map((p,i) => `
+        <div class="pregunta-block">
+          <div class="p-text">${i+1}. ${esc(p)}</div>
+          <div class="respuesta-view">${esc((t.respuestas && t.respuestas[i]) || '')}</div>
+        </div>`).join('')}
+      ${t.calificacion ? `<div class="stamp ${stampClass}">${esc(t.calificacion)}</div><br>` : ''}
+      ${t.correccion ? `<div class="correccion-box"><b>Nico dice:</b><br>${esc(t.correccion)}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+/* ---- Responder tarea ---- */
+function openTarea(id){
+  const t = STATE.tareas.find(x => x.id === id);
+  STATE.openTareaModal = t;
+  STATE.respuestasDraft = (t.preguntas || []).map(() => "");
+  render();
+}
+function closeTarea(){ STATE.openTareaModal = null; render(); }
+function updateRespuesta(i, v){ STATE.respuestasDraft[i] = v; }
+
+async function submitRespuestas(){
+  const t = STATE.openTareaModal;
+  const { error } = await sb.from('tareas').update({
+    respuestas: STATE.respuestasDraft,
+    estado: 'respondida',
+    fecha_envio_nino: new Date().toISOString()
+  }).eq('id', t.id);
+  if(!error){
+    STATE.openTareaModal = null;
+    await loadTareas();
+    render();
+  }
+}
+
+/* ======================= MODALES ======================= */
+function renderModals(){
+  if(STATE.openAddNinoModal) return modalAddNino();
+  if(STATE.openAssignModalFor) return modalAssign();
+  if(STATE.openTareaModal) return modalTarea();
+  return "";
+}
+
+function modalAddNino(){
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this) closeAddNino()">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>Agregar niño</h3>
+        <div class="close-x" onclick="closeAddNino()">✕</div>
+      </div>
+      <label>Usuario</label>
+      <input type="text" id="new-nino-usuario" placeholder="Usuario del niño">
+      <label>Contraseña</label>
+      <input type="text" id="new-nino-contrasena" placeholder="Contraseña">
+      ${STATE.addNinoError ? `<div class="error-msg">${esc(STATE.addNinoError)}</div>` : ""}
+      <button class="btn-primary" onclick="submitAddNino()">Crear</button>
+    </div>
+  </div>`;
+}
+
+function modalAssign(){
+  const nino = STATE.ninos.find(n => n.id === STATE.openAssignModalFor);
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this) closeAssign()">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>Para ${esc(nino ? nino.usuario : '')}</h3>
+        <div class="close-x" onclick="closeAssign()">✕</div>
+      </div>
+      <label>Texto</label>
+      <textarea id="assign-texto" placeholder="Escribí el texto que va a leer el niño..." oninput="updateAssignTexto(this.value)">${esc(STATE.assignDraft.texto)}</textarea>
+      <label>Preguntas</label>
+      ${STATE.assignDraft.preguntas.map((p,i) => `
+        <div class="pregunta-row">
+          <input type="text" value="${esc(p)}" placeholder="Pregunta ${i+1}" oninput="updateAssignPregunta(${i}, this.value)">
+          <div class="remove-btn" onclick="removePreguntaField(${i})">✕</div>
+        </div>`).join('')}
+      <button class="add-pregunta-btn" onclick="addPreguntaField()">+ Agregar pregunta</button>
+      ${STATE.assignError ? `<div class="error-msg">${esc(STATE.assignError)}</div>` : ""}
+      <button class="btn-primary" onclick="submitAssign()">Enviar al Niño</button>
+    </div>
+  </div>`;
+}
+
+function modalTarea(){
+  const t = STATE.openTareaModal;
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this) closeTarea()">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>Tarea</h3>
+        <div class="close-x" onclick="closeTarea()">✕</div>
+      </div>
+      <div class="task-texto" style="margin-top:8px;">${esc(t.texto)}</div>
+      <div class="divider"></div>
+      ${(t.preguntas || []).map((p,i) => `
+        <label>${i+1}. ${esc(p)}</label>
+        <textarea oninput="updateRespuesta(${i}, this.value)">${esc(STATE.respuestasDraft[i] || '')}</textarea>
+      `).join('')}
+      <button class="btn-success btn-block" style="margin-top:16px;" onclick="submitRespuestas()">Enviar</button>
+    </div>
+  </div>`;
+}
+
+/* ======================= INIT ======================= */
+render();
+</script>
+</body>
+</html>
