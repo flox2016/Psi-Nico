@@ -209,6 +209,22 @@
   .add-pregunta-btn{
     background:var(--primary-soft);color:var(--primary-dark);width:100%;margin-top:4px;
   }
+  .imagenes-grid{
+    display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:4px;
+  }
+  .imagen-thumb{
+    position:relative;border-radius:10px;overflow:hidden;aspect-ratio:1;border:1px solid var(--border);
+  }
+  .imagen-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+  .imagen-remove{
+    position:absolute;top:4px;right:4px;width:24px;height:24px;font-size:12px;
+  }
+  .task-imagenes-grid{
+    display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px;
+  }
+  .task-imagenes-grid img{
+    width:100%;border-radius:12px;display:block;object-fit:cover;aspect-ratio:1;
+  }
   .task-card{
     background:#fff;border:1px solid var(--border);border-radius:16px;
     padding:16px;margin-bottom:12px;
@@ -301,7 +317,7 @@ let STATE = {
   openAddNinoModal: false,
   addNinoError: "",
   openAssignModal: false,
-  assignDraft: { ninoIds:[], nombre:"", texto:"", preguntas:[""], tiempoMin:"" },
+  assignDraft: { ninoIds:[], nombre:"", texto:"", preguntas:[""], tiempoMin:"", imagenes:[] },
   assignError: "",
   openNinoTareasFor: null,
   tareaDetalleId: null,
@@ -539,7 +555,7 @@ async function eliminarNino(id, nombre){
 /* ---- Asignar tarea (a uno o varios niños) ---- */
 function openAssign(ninoId){
   STATE.openAssignModal = true;
-  STATE.assignDraft = { ninoIds: ninoId ? [ninoId] : [], nombre:"", texto:"", preguntas:[""], tiempoMin:"" };
+  STATE.assignDraft = { ninoIds: ninoId ? [ninoId] : [], nombre:"", texto:"", preguntas:[""], tiempoMin:"", imagenes:[] };
   STATE.assignError = "";
   render();
 }
@@ -562,6 +578,43 @@ function updateAssignTexto(v){ STATE.assignDraft.texto = v; }
 function updateAssignPregunta(i, v){ STATE.assignDraft.preguntas[i] = v; }
 function updateAssignTiempo(v){ STATE.assignDraft.tiempoMin = v; }
 
+function triggerImagePicker(){
+  const input = document.getElementById('assign-image-input');
+  if(input) input.click();
+}
+
+function handleImageFiles(input){
+  const files = Array.from(input.files || []);
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 900;
+        let w = img.width, h = img.height;
+        if(w > MAX || h > MAX){
+          if(w > h){ h = Math.round(h * MAX / w); w = MAX; }
+          else{ w = Math.round(w * MAX / h); h = MAX; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
+        STATE.assignDraft.imagenes.push(dataUrl);
+        render();
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+  input.value = "";
+}
+
+function removeImagenField(i){
+  STATE.assignDraft.imagenes.splice(i, 1);
+  render();
+}
+
 async function submitAssign(){
   const nombre = STATE.assignDraft.nombre.trim();
   const texto = STATE.assignDraft.texto.trim();
@@ -580,6 +633,7 @@ async function submitAssign(){
     texto,
     preguntas,
     tiempo_segundos: (!isNaN(tiempoMin) && tiempoMin > 0) ? tiempoMin * 60 : null,
+    imagenes: STATE.assignDraft.imagenes,
     estado: 'pendiente',
     fecha_envio_nico: new Date().toISOString()
   }));
@@ -657,6 +711,7 @@ function renderNinoTareaCard(t){
       <div class="task-meta"><span class="estado-chip estado-pendiente">Pendiente</span></div>
       <div class="task-nombre">${esc(t.nombre || 'Tarea')}</div>
       <div class="task-texto">${esc(t.texto)}</div>
+      ${(t.imagenes && t.imagenes.length) ? `<div class="task-imagenes-grid">${t.imagenes.map(src => `<img src="${src}">`).join('')}</div>` : ''}
       ${t.tiempo_segundos ? `<div class="fade-note" style="margin-bottom:10px;">Tenés ${Math.round(t.tiempo_segundos/60)} minuto${Math.round(t.tiempo_segundos/60)===1?'':'s'} una vez que empieces.</div>` : ''}
       <button class="btn-accent btn-block" onclick="empezarTarea('${t.id}')">EMPEZAR</button>
     </div>`;
@@ -678,6 +733,7 @@ function renderNinoTareaCard(t){
     <div class="task-meta"><span class="estado-chip estado-corregida">Corregida</span></div>
     <div class="task-nombre">${esc(t.nombre || 'Tarea')}</div>
     <div class="task-texto">${esc(t.texto)}</div>
+    ${(t.imagenes && t.imagenes.length) ? `<div class="task-imagenes-grid">${t.imagenes.map(src => `<img src="${src}">`).join('')}</div>` : ''}
     ${(t.preguntas||[]).map((p,i) => `
       <div class="pregunta-block">
         <div class="p-text">${i+1}. ${esc(p)}</div>
@@ -824,6 +880,17 @@ function modalAssign(){
           <div class="remove-btn" onclick="removePreguntaField(${i})">✕</div>
         </div>`).join('')}
       <button class="add-pregunta-btn" onclick="addPreguntaField()">+ Agregar pregunta</button>
+      <label>Imágenes (opcional)</label>
+      ${STATE.assignDraft.imagenes.length ? `
+        <div class="imagenes-grid">
+          ${STATE.assignDraft.imagenes.map((src,i) => `
+            <div class="imagen-thumb">
+              <img src="${src}" alt="Imagen ${i+1}">
+              <div class="remove-btn imagen-remove" onclick="removeImagenField(${i})">✕</div>
+            </div>`).join('')}
+        </div>` : ''}
+      <input type="file" id="assign-image-input" accept="image/*" multiple style="display:none;" onchange="handleImageFiles(this)">
+      <button class="add-pregunta-btn" onclick="triggerImagePicker()">+ Imagen</button>
       <label>Tiempo (minutos, opcional)</label>
       <input type="number" min="1" id="assign-tiempo" placeholder="Ej: 5" value="${esc(STATE.assignDraft.tiempoMin)}" oninput="updateAssignTiempo(this.value)">
       ${STATE.assignError ? `<div class="error-msg">${esc(STATE.assignError)}</div>` : ""}
@@ -888,6 +955,7 @@ function modalTareaDetalle(){
       ${t.calificacion ? `<div class="fade-note">Calificado: <b>${esc(t.calificacion)}</b></div>` : ''}
       <div class="divider"></div>
       <div class="task-texto"><b>Texto:</b> ${esc(t.texto)}</div>
+      ${(t.imagenes && t.imagenes.length) ? `<div class="task-imagenes-grid">${t.imagenes.map(src => `<img src="${src}">`).join('')}</div>` : ''}
       ${(t.preguntas || []).map((p, i) => `
         <div class="pregunta-block">
           <div class="p-text">${i+1}. ${esc(p)}</div>
