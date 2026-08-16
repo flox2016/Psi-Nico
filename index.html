@@ -220,10 +220,10 @@
     position:absolute;top:4px;right:4px;width:24px;height:24px;font-size:12px;
   }
   .task-imagenes-grid{
-    display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px;
+    display:flex;flex-direction:column;gap:8px;margin-bottom:12px;
   }
   .task-imagenes-grid img{
-    width:100%;border-radius:12px;display:block;object-fit:cover;aspect-ratio:1;
+    width:100%;border-radius:12px;display:block;object-fit:contain;background:var(--bg);
   }
   .task-card{
     background:#fff;border:1px solid var(--border);border-radius:16px;
@@ -242,6 +242,7 @@
   .estado-enviada{background:var(--primary-soft);color:var(--primary-dark);}
   .estado-revisar{background:var(--revisar-soft);color:var(--revisar);}
   .estado-corregida{background:var(--success-soft);color:var(--success);}
+  .estado-a_revisar{background:var(--accent-soft);color:var(--accent-dark);}
   .pregunta-block{margin-bottom:14px;}
   .pregunta-block .p-text{font-weight:600;font-size:14.5px;margin-bottom:6px;}
   .respuesta-view{
@@ -265,6 +266,9 @@
     background:var(--primary);color:#fff;padding:11px 16px;border-radius:12px;
     font-weight:700;margin-bottom:18px;width:100%;
   }
+  .split-btn-row{display:flex;gap:10px;margin-bottom:18px;}
+  .fab-half{width:auto;flex:1;margin-bottom:0;}
+  .fab-basedatos{background:var(--primary-dark);}
   .fade-note{font-size:12px;color:var(--ink-soft);margin-top:2px;}
   .section-title{font-size:13px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.04em;margin:20px 0 10px;}
   .divider{height:1px;background:var(--border);margin:14px 0;}
@@ -328,9 +332,17 @@ let STATE = {
   tareaInicio: null,
   tareaTimerEnd: null,
   tareaTimerInterval: null,
+  // --- banco de tareas (plantillas) ---
+  plantillas: [],
+  openPlantillaPicker: false,
+  plantillaPickerSeleccionada: null,
+  openBaseDatos: false,
+  plantillaEditDraft: null, // { id, nombre, texto, preguntas, imagenes, tiempoMin }
+  plantillaEditError: "",
+  openContrasenas: false,
 };
 
-let chNinos = null, chTareas = null;
+let chNinos = null, chTareas = null, chPlantillas = null;
 
 /* ======================= HELPERS ======================= */
 function esc(s){
@@ -357,6 +369,9 @@ function forceUpper(el){
   try{ el.setSelectionRange(pos, pos2); }catch(e){}
 }
 function render(){
+  const prevModal = document.querySelector('.modal');
+  const prevScroll = prevModal ? prevModal.scrollTop : null;
+
   const app = document.getElementById('app');
   if(!STATE.user) app.innerHTML = renderLogin();
   else if(STATE.user.type === 'nico') app.innerHTML = renderNico();
@@ -364,9 +379,15 @@ function render(){
 
   const modal = renderModals();
   if(modal) app.innerHTML += modal;
+
+  if(prevScroll !== null){
+    const newModal = document.querySelector('.modal');
+    if(newModal) newModal.scrollTop = prevScroll;
+  }
 }
 
 function estadoInfo(t){
+  if(t.estado === 'a_revisar') return { key:'a_revisar', label:'A revisar' };
   if(t.estado === 'pendiente') return { key:'pendiente', label:'Pendiente' };
   if(t.estado === 'corregida') return { key:'corregida', label:'Corregida' };
   const horas = (Date.now() - new Date(t.fecha_envio_nino).getTime()) / 3600000;
@@ -407,6 +428,7 @@ async function handleLogin(){
     STATE.loginError = "";
     await loadNinos();
     await loadTareas();
+    await loadPlantillas();
     subscribeRealtime();
     render();
     return;
@@ -438,11 +460,16 @@ function logout(){
   STATE.loginError = "";
   STATE.ninos = [];
   STATE.tareas = [];
+  STATE.plantillas = [];
   STATE.openNinoTareasFor = null;
   STATE.tareaDetalleId = null;
   STATE.openTareaModal = null;
+  STATE.openBaseDatos = false;
+  STATE.openContrasenas = false;
+  STATE.openPlantillaPicker = false;
   if(chNinos) sb.removeChannel(chNinos);
   if(chTareas) sb.removeChannel(chTareas);
+  if(chPlantillas) sb.removeChannel(chPlantillas);
   render();
 }
 
@@ -469,9 +496,43 @@ async function loadTareas(){
   }
 }
 
+async function loadPlantillas(){
+  const { data, error } = await sb.from('plantillas').select('*').order('created_at', { ascending:false });
+  if(error){
+    console.error('Error cargando plantillas:', error);
+    STATE.loadPlantillasError = error.message;
+    return;
+  }
+  STATE.loadPlantillasError = null;
+  STATE.plantillas = data || [];
+}
+
+async function importarTareasComoPlantillas(){
+  const vistos = new Set();
+  const nuevas = [];
+  STATE.tareas.forEach(t => {
+    const clave = (t.nombre || '') + '|' + (t.texto || '');
+    if(vistos.has(clave)) return;
+    vistos.add(clave);
+    nuevas.push({
+      nombre: t.nombre || 'Tarea',
+      texto: t.texto,
+      preguntas: t.preguntas || [],
+      imagenes: t.imagenes || [],
+      tiempo_segundos: t.tiempo_segundos || null
+    });
+  });
+  if(nuevas.length === 0) return;
+  const { error } = await sb.from('plantillas').insert(nuevas);
+  if(error){ console.error('Error importando plantillas:', error); return; }
+  await loadPlantillas();
+  render();
+}
+
 function subscribeRealtime(){
   if(chNinos) sb.removeChannel(chNinos);
   if(chTareas) sb.removeChannel(chTareas);
+  if(chPlantillas) sb.removeChannel(chPlantillas);
 
   chNinos = sb.channel('ninos-changes')
     .on('postgres_changes', { event:'*', schema:'public', table:'ninos' }, async () => {
@@ -481,6 +542,11 @@ function subscribeRealtime(){
   chTareas = sb.channel('tareas-changes')
     .on('postgres_changes', { event:'*', schema:'public', table:'tareas' }, async () => {
       await loadTareas(); render();
+    }).subscribe();
+
+  chPlantillas = sb.channel('plantillas-changes')
+    .on('postgres_changes', { event:'*', schema:'public', table:'plantillas' }, async () => {
+      if(STATE.user?.type === 'nico'){ await loadPlantillas(); render(); }
     }).subscribe();
 }
 
@@ -495,10 +561,16 @@ function renderNico(){
         <div class="fade-note">Panel del profesional</div>
       </div>
     </div>
-    <button class="btn-ghost btn-small" onclick="logout()">Salir</button>
+    <div class="row-gap">
+      <button class="btn-ghost btn-small" onclick="openContrasenas()">🔑 Contraseñas</button>
+      <button class="btn-ghost btn-small" onclick="logout()">Salir</button>
+    </div>
   </div>
 
-  <button class="fab-add" onclick="openAddNino()">+ Chicos y Chicas</button>
+  <div class="split-btn-row">
+    <button class="fab-add fab-half" onclick="openAddNino()">+ Chicos y Chicas</button>
+    <button class="fab-add fab-half fab-basedatos" onclick="openBaseDatos()">📚 Base de datos</button>
+  </div>
 
   ${STATE.loadNinosError ? `<div class="error-msg" style="margin-bottom:16px;">No se pudieron cargar todos los niños: ${esc(STATE.loadNinosError)}</div>` : ''}
   ${STATE.ninos.length === 0 && !STATE.loadNinosError ? `<div class="empty-state">Todavía no agregaste ningún niño.</div>` : ''}
@@ -555,7 +627,7 @@ async function eliminarNino(id, nombre){
 /* ---- Asignar tarea (a uno o varios niños) ---- */
 function openAssign(ninoId){
   STATE.openAssignModal = true;
-  STATE.assignDraft = { ninoIds: ninoId ? [ninoId] : [], nombre:"", texto:"", preguntas:[""], tiempoMin:"", imagenes:[] };
+  STATE.assignDraft = { ninoIds: ninoId ? [ninoId] : [], nombre:"", texto:"", preguntas:[""], tiempoMin:"", imagenes:[], fromPlantillaId:null };
   STATE.assignError = "";
   render();
 }
@@ -615,6 +687,126 @@ function removeImagenField(i){
   render();
 }
 
+/* ---- Banco de tareas: elegir plantilla dentro de "Nueva tarea" ---- */
+function openPlantillaPicker(){
+  STATE.openPlantillaPicker = true;
+  STATE.plantillaPickerSeleccionada = null;
+  render();
+}
+function closePlantillaPicker(){ STATE.openPlantillaPicker = false; render(); }
+function togglePlantillaPick(id){
+  STATE.plantillaPickerSeleccionada = STATE.plantillaPickerSeleccionada === id ? null : id;
+  render();
+}
+function confirmarPlantilla(){
+  const p = STATE.plantillas.find(x => x.id === STATE.plantillaPickerSeleccionada);
+  if(!p) return;
+  STATE.assignDraft.nombre = p.nombre || "";
+  STATE.assignDraft.texto = p.texto || "";
+  STATE.assignDraft.preguntas = (p.preguntas && p.preguntas.length) ? [...p.preguntas] : [""];
+  STATE.assignDraft.imagenes = p.imagenes ? [...p.imagenes] : [];
+  STATE.assignDraft.tiempoMin = p.tiempo_segundos ? String(Math.round(p.tiempo_segundos/60)) : "";
+  STATE.assignDraft.fromPlantillaId = p.id;
+  STATE.openPlantillaPicker = false;
+  render();
+}
+
+/* ---- Base de datos: gestión completa del banco de tareas ---- */
+function openBaseDatos(){ STATE.openBaseDatos = true; STATE.plantillaEditDraft = null; render(); }
+function closeBaseDatos(){ STATE.openBaseDatos = false; STATE.plantillaEditDraft = null; render(); }
+
+function abrirEditorPlantilla(id){
+  const p = STATE.plantillas.find(x => x.id === id);
+  if(!p) return;
+  STATE.plantillaEditDraft = {
+    id: p.id,
+    nombre: p.nombre || "",
+    texto: p.texto || "",
+    preguntas: (p.preguntas && p.preguntas.length) ? [...p.preguntas] : [""],
+    imagenes: p.imagenes ? [...p.imagenes] : [],
+    tiempoMin: p.tiempo_segundos ? String(Math.round(p.tiempo_segundos/60)) : ""
+  };
+  STATE.plantillaEditError = "";
+  render();
+}
+function cerrarEditorPlantilla(){ STATE.plantillaEditDraft = null; render(); }
+
+function editDraftUpdateNombre(v){ STATE.plantillaEditDraft.nombre = v; }
+function editDraftUpdateTexto(v){ STATE.plantillaEditDraft.texto = v; }
+function editDraftUpdatePregunta(i, v){ STATE.plantillaEditDraft.preguntas[i] = v; }
+function editDraftAddPregunta(){ STATE.plantillaEditDraft.preguntas.push(""); render(); }
+function editDraftRemovePregunta(i){
+  STATE.plantillaEditDraft.preguntas.splice(i,1);
+  if(STATE.plantillaEditDraft.preguntas.length === 0) STATE.plantillaEditDraft.preguntas.push("");
+  render();
+}
+function editDraftUpdateTiempo(v){ STATE.plantillaEditDraft.tiempoMin = v; }
+function editDraftTriggerImagePicker(){
+  const input = document.getElementById('edit-image-input');
+  if(input) input.click();
+}
+function editDraftHandleImageFiles(input){
+  const files = Array.from(input.files || []);
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 900;
+        let w = img.width, h = img.height;
+        if(w > MAX || h > MAX){
+          if(w > h){ h = Math.round(h * MAX / w); w = MAX; }
+          else{ w = Math.round(w * MAX / h); h = MAX; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        STATE.plantillaEditDraft.imagenes.push(canvas.toDataURL('image/jpeg', 0.75));
+        render();
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+  input.value = "";
+}
+function editDraftRemoveImagen(i){ STATE.plantillaEditDraft.imagenes.splice(i,1); render(); }
+
+async function guardarEdicionPlantilla(){
+  const d = STATE.plantillaEditDraft;
+  const nombre = d.nombre.trim();
+  const texto = d.texto.trim();
+  const preguntas = d.preguntas.map(p => p.trim()).filter(p => p.length > 0);
+  const tiempoMin = parseInt(d.tiempoMin, 10);
+
+  if(!nombre){ STATE.plantillaEditError = "Ponele un nombre"; render(); return; }
+  if(!texto){ STATE.plantillaEditError = "Escribí el texto"; render(); return; }
+  if(preguntas.length === 0){ STATE.plantillaEditError = "Agregá al menos una pregunta"; render(); return; }
+
+  const { error } = await sb.from('plantillas').update({
+    nombre, texto, preguntas,
+    imagenes: d.imagenes,
+    tiempo_segundos: (!isNaN(tiempoMin) && tiempoMin > 0) ? tiempoMin * 60 : null
+  }).eq('id', d.id);
+
+  if(error){ STATE.plantillaEditError = "No se pudo guardar"; render(); return; }
+  STATE.plantillaEditDraft = null;
+  await loadPlantillas();
+  render();
+}
+
+async function eliminarPlantilla(id, nombre){
+  if(!confirm(`¿Eliminar "${nombre}" del banco de tareas? Esto no afecta tareas ya enviadas a los niños.`)) return;
+  await sb.from('plantillas').delete().eq('id', id);
+  STATE.plantillaEditDraft = null;
+  await loadPlantillas();
+  render();
+}
+
+/* ---- Ver contraseñas ---- */
+function openContrasenas(){ STATE.openContrasenas = true; render(); }
+function closeContrasenas(){ STATE.openContrasenas = false; render(); }
+
 async function submitAssign(){
   const nombre = STATE.assignDraft.nombre.trim();
   const texto = STATE.assignDraft.texto.trim();
@@ -640,6 +832,16 @@ async function submitAssign(){
 
   const { error } = await sb.from('tareas').insert(filas);
   if(error){ STATE.assignError = "No se pudo enviar"; render(); return; }
+
+  if(!STATE.assignDraft.fromPlantillaId){
+    await sb.from('plantillas').insert({
+      nombre, texto, preguntas,
+      imagenes: STATE.assignDraft.imagenes,
+      tiempo_segundos: (!isNaN(tiempoMin) && tiempoMin > 0) ? tiempoMin * 60 : null
+    });
+    await loadPlantillas();
+  }
+
   STATE.openAssignModal = false;
   await loadTareas();
   render();
@@ -683,6 +885,26 @@ async function enviarCorreccion(tareaId){
   }
 }
 
+async function enviarARevisar(tareaId){
+  const draft = STATE.gradeDraft[tareaId] || {};
+  const nota = (draft.correccion || '').trim();
+  if(!nota){
+    alert('Escribí qué tiene que revisar el niño antes de mandarlo.');
+    return;
+  }
+  const { error } = await sb.from('tareas').update({
+    correccion: nota,
+    calificacion: draft.calificacion || null,
+    estado: 'a_revisar',
+    fecha_correccion: new Date().toISOString()
+  }).eq('id', tareaId);
+  if(!error){
+    delete STATE.gradeDraft[tareaId];
+    await loadTareas();
+    render();
+  }
+}
+
 /* ======================= PANEL NIÑO ======================= */
 function renderNino(){
   const lista = [...STATE.tareas].sort((a,b) => new Date(b.fecha_envio_nico) - new Date(a.fecha_envio_nico));
@@ -705,6 +927,18 @@ function renderNino(){
 
 function renderNinoTareaCard(t){
   const info = estadoInfo(t);
+  if(info.key === 'a_revisar'){
+    return `
+    <div class="task-card">
+      <div class="task-meta"><span class="estado-chip estado-a_revisar">A revisar</span></div>
+      <div class="task-nombre">${esc(t.nombre || 'Tarea')}</div>
+      ${t.correccion ? `<div class="correccion-box"><b>Nico dice:</b><br>${esc(t.correccion)}</div>` : ''}
+      <div class="task-texto">${esc(t.texto)}</div>
+      ${(t.imagenes && t.imagenes.length) ? `<div class="task-imagenes-grid">${t.imagenes.map(src => `<img src="${src}">`).join('')}</div>` : ''}
+      ${t.tiempo_segundos ? `<div class="fade-note" style="margin-bottom:10px;">Tenés ${Math.round(t.tiempo_segundos/60)} minuto${Math.round(t.tiempo_segundos/60)===1?'':'s'} una vez que empieces.</div>` : ''}
+      <button class="btn-accent btn-block" onclick="empezarTarea('${t.id}')">EMPEZAR</button>
+    </div>`;
+  }
   if(info.key === 'pendiente'){
     return `
     <div class="task-card">
@@ -827,11 +1061,127 @@ async function submitRespuestas(){
 
 /* ======================= MODALES ======================= */
 function renderModals(){
+  if(STATE.openPlantillaPicker) return modalPlantillaPicker();
   if(STATE.openAddNinoModal) return modalAddNino();
   if(STATE.openAssignModal) return modalAssign();
+  if(STATE.openBaseDatos) return modalBaseDatos();
+  if(STATE.openContrasenas) return modalContrasenas();
   if(STATE.openNinoTareasFor) return modalNinoTareas();
   if(STATE.openTareaModal) return modalTarea();
   return "";
+}
+
+function modalPlantillaPicker(){
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this) closePlantillaPicker()">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>Elegir del banco de tareas</h3>
+        <div class="close-x" onclick="closePlantillaPicker()">✕</div>
+      </div>
+      ${STATE.plantillas.length === 0 ? `<div class="empty-state">Todavía no hay tareas guardadas en el banco.</div>` : ''}
+      ${STATE.plantillas.map(p => {
+        const checked = STATE.plantillaPickerSeleccionada === p.id;
+        return `
+        <div class="nino-check-row ${checked?'checked':''}" onclick="togglePlantillaPick('${p.id}')">
+          <input type="radio" ${checked?'checked':''} onclick="event.stopPropagation(); togglePlantillaPick('${p.id}')">
+          <span>${esc(p.nombre)}</span>
+        </div>`;
+      }).join('')}
+      <button class="btn-primary" onclick="confirmarPlantilla()" ${STATE.plantillaPickerSeleccionada ? '' : 'disabled style="opacity:.5;"'}>Listo</button>
+    </div>
+  </div>`;
+}
+
+function modalBaseDatos(){
+  if(STATE.plantillaEditDraft) return modalEditorPlantilla();
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this) closeBaseDatos()">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>📚 Base de datos</h3>
+        <div class="close-x" onclick="closeBaseDatos()">✕</div>
+      </div>
+      ${STATE.loadPlantillasError ? `<div class="error-msg" style="margin-bottom:12px;">No se pudo cargar el banco de tareas: ${esc(STATE.loadPlantillasError)}</div>` : ''}
+      ${(!STATE.loadPlantillasError && STATE.plantillas.length === 0) ? `
+        <div class="empty-state">Todavía no hay tareas guardadas acá.</div>
+        <button class="btn-accent btn-block" style="margin-top:10px;" onclick="importarTareasComoPlantillas()">Importar tareas ya enviadas</button>
+      ` : ''}
+      ${STATE.plantillas.length ? `
+      <table class="tabla-tareas">
+        <thead><tr><th>Tareas</th><th></th><th></th></tr></thead>
+        <tbody>
+          ${STATE.plantillas.map(p => `
+            <tr>
+              <td>${esc(p.nombre)}</td>
+              <td><span class="close-x" onclick="abrirEditorPlantilla('${p.id}')" title="Editar">🖌</span></td>
+              <td><span class="close-x" onclick="eliminarPlantilla('${p.id}','${esc(p.nombre).replace(/'/g,"\\'")}')" title="Eliminar">🗑</span></td>
+            </tr>`).join('')}
+        </tbody>
+      </table>` : ''}
+    </div>
+  </div>`;
+}
+
+function modalEditorPlantilla(){
+  const d = STATE.plantillaEditDraft;
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this) cerrarEditorPlantilla()">
+    <div class="modal">
+      <div class="modal-head">
+        <div style="display:flex;align-items:center;">
+          <div class="back-arrow" onclick="cerrarEditorPlantilla()">←</div>
+          <h3>Editar tarea</h3>
+        </div>
+        <div class="close-x" onclick="closeBaseDatos()">✕</div>
+      </div>
+      <label>Nombre de la tarea</label>
+      <input type="text" value="${esc(d.nombre)}" oninput="forceUpper(this); editDraftUpdateNombre(this.value)">
+      <label>Texto</label>
+      <textarea oninput="forceUpper(this); editDraftUpdateTexto(this.value)">${esc(d.texto)}</textarea>
+      <label>Preguntas</label>
+      ${d.preguntas.map((p,i) => `
+        <div class="pregunta-row">
+          <input type="text" value="${esc(p)}" placeholder="Pregunta ${i+1}" oninput="forceUpper(this); editDraftUpdatePregunta(${i}, this.value)">
+          <div class="remove-btn" onclick="editDraftRemovePregunta(${i})">✕</div>
+        </div>`).join('')}
+      <button class="add-pregunta-btn" onclick="editDraftAddPregunta()">+ Agregar pregunta</button>
+      <label>Imágenes</label>
+      ${d.imagenes.length ? `
+        <div class="imagenes-grid">
+          ${d.imagenes.map((src,i) => `
+            <div class="imagen-thumb">
+              <img src="${src}" alt="Imagen ${i+1}">
+              <div class="remove-btn imagen-remove" onclick="editDraftRemoveImagen(${i})">✕</div>
+            </div>`).join('')}
+        </div>` : ''}
+      <input type="file" id="edit-image-input" accept="image/*" multiple style="display:none;" onchange="editDraftHandleImageFiles(this)">
+      <button class="add-pregunta-btn" onclick="editDraftTriggerImagePicker()">+ Imagen</button>
+      <label>Tiempo (minutos, opcional)</label>
+      <input type="number" min="1" value="${esc(d.tiempoMin)}" oninput="editDraftUpdateTiempo(this.value)">
+      ${STATE.plantillaEditError ? `<div class="error-msg">${esc(STATE.plantillaEditError)}</div>` : ''}
+      <button class="btn-primary" onclick="guardarEdicionPlantilla()">Guardar cambios</button>
+    </div>
+  </div>`;
+}
+
+function modalContrasenas(){
+  return `
+  <div class="modal-overlay" onclick="if(event.target===this) closeContrasenas()">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>🔑 Contraseñas</h3>
+        <div class="close-x" onclick="closeContrasenas()">✕</div>
+      </div>
+      <table class="tabla-tareas">
+        <thead><tr><th>Usuario</th><th>Contraseña</th></tr></thead>
+        <tbody>
+          <tr><td><b>${esc(NICO_USUARIO)}</b> (vos)</td><td>${esc(NICO_CONTRASENA)}</td></tr>
+          ${STATE.ninos.map(n => `<tr><td>${esc(n.usuario)}</td><td>${esc(n.contrasena)}</td></tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>`;
 }
 
 function modalAddNino(){
@@ -857,7 +1207,10 @@ function modalAssign(){
   <div class="modal-overlay" onclick="if(event.target===this) closeAssign()">
     <div class="modal">
       <div class="modal-head">
-        <h3>Nueva tarea</h3>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <h3>Nueva tarea</h3>
+          <div class="close-x" onclick="openPlantillaPicker()" title="Elegir del banco de tareas" style="font-weight:800;">[+]</div>
+        </div>
         <div class="close-x" onclick="closeAssign()">✕</div>
       </div>
       <label>¿Para quién es esta tarea?</label>
@@ -936,7 +1289,7 @@ function modalTareaDetalle(){
   if(!t){ STATE.tareaDetalleId = null; return modalNinoTareas(); }
   const info = estadoInfo(t);
   const draft = STATE.gradeDraft[t.id] || { calificacion: t.calificacion || '', correccion: t.correccion || '' };
-  const puedeCalificar = info.key === 'enviada' || info.key === 'revisar' || info.key === 'corregida';
+  const puedeCalificar = info.key === 'enviada' || info.key === 'revisar' || info.key === 'corregida' || info.key === 'a_revisar';
 
   return `
   <div class="modal-overlay" onclick="if(event.target===this) closeChildTareas()">
@@ -973,7 +1326,10 @@ function modalTareaDetalle(){
         </select>
         <label>Corrección / comentario para el niño</label>
         <textarea placeholder="Escribí una devolución..." oninput="forceUpper(this); updateDraft('${t.id}','correccion',this.value)">${esc(draft.correccion)}</textarea>
-        <button class="btn-success btn-block" style="margin-top:12px;" onclick="enviarCorreccion('${t.id}')">Enviar al Niño</button>
+        <div class="row-gap" style="margin-top:12px;">
+          <button class="btn-accent" style="flex:1;" onclick="enviarARevisar('${t.id}')">🔁 Revisar</button>
+          <button class="btn-success" style="flex:1;" onclick="enviarCorreccion('${t.id}')">Enviar al Niño</button>
+        </div>
       ` : ''}
       <button class="btn-outline-danger btn-block" style="margin-top:10px;" onclick="eliminarTarea('${t.id}','${esc(t.nombre||'Tarea').replace(/'/g,"\\'")}')">Eliminar tarea</button>
     </div>
