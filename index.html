@@ -986,7 +986,7 @@ function clearTareaTimer(){
 function empezarTarea(id){
   const t = STATE.tareas.find(x => x.id === id);
   STATE.openTareaModal = t;
-  STATE.respuestasDraft = (t.preguntas || []).map(() => "");
+  STATE.respuestasDraft = (t.preguntas || []).map((_, i) => (t.respuestas && t.respuestas[i]) || "");
   STATE.tareaFase = 'preguntas';
   STATE.tareaInicio = Date.now();
   clearTareaTimer();
